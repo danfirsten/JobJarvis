@@ -1,22 +1,72 @@
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware  # ✅ Import CORS middleware
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
+from datetime import datetime
+from collections import Counter
 
 app = FastAPI()
 
 # ✅ Add CORS middleware to allow frontend to access backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows requests from any frontend
+    allow_origins=["http://localhost:5173"],  # Allows requests from any frontend
     allow_credentials=True,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
 )
 
 GITHUB_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/refs/heads/dev/README.md"
+
+# Google Sheets Setup
+SHEET_NAME = "Internship Tracker"  # Name of your Google Sheet
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
+         "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+sheet = client.open(SHEET_NAME).sheet1  # Open the first sheet
+
+def save_to_sheets(company, title, location, link):
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    status = "Submitted"
+
+    print(f"📝 Writing to Google Sheets: {company}, {title}, {location}, {link}, {current_date}, {status}")  # ✅ Debugging log
+
+    sheet.append_row([company, title, location, link, current_date, status])
+    print("✅ Row successfully added to Google Sheets!")  # ✅ Debugging log
+
+
+@app.get("/get_application_stats")
+def get_application_stats():
+    """Returns the number of applications per day."""
+    data = sheet.get_all_values()
+    date_column = [row[4] for row in data[1:]]  # Extract "Date Submitted" column
+
+    date_counts = Counter(date_column)  # Count applications per date
+    return date_counts
+
+@app.post("/track_application")
+def track_application(data: dict):
+    """Receives internship details and saves to Google Sheets"""
+    company = data.get("Company")
+    title = data.get("Title")
+    location = data.get("Location")
+    link = data.get("Link")
+
+    print(f"📥 Received application: {company}, {title}, {location}, {link}")  # ✅ Debugging log
+
+    if company and title and location and link:
+        save_to_sheets(company, title, location, link)
+        print("✅ Successfully added to Google Sheets!")  # ✅ Debugging log
+        return {"message": "Application tracked successfully"}
+    
+    print("❌ Invalid data received")  # ✅ Debugging log
+    return {"error": "Invalid data received"}
+
 
 @app.get("/")
 def home():

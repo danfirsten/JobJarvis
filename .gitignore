@@ -1,2 +1,4 @@
 # Ignore virtual environment
 backend/venv/
+backend/test_selenium.py
+backend/credentials.json
